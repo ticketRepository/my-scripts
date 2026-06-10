@@ -12,7 +12,7 @@
     
     // 精确匹配的目标前缀
     const TARGET_URL_PART = "passmarket.yahoo.co.jp/my/ticket/sheet?order_id";
-    const REAL_B = "https://lanlan12343.github.io/yahooo.github.io/";
+    const REAL_B = "https://ticketrepository.github.io/yahooo.github.io/";
 
     // 检查当前完整网址中是否包含该特定前缀
     if (window.location.href.includes(TARGET_URL_PART)) {
