@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         baidai名字修改
+// @name         bandai名字修改
 // @namespace    lanlan
 // @version      7.0
 // @description  完美解决“姓名名”显示错误，在把名同步过去的同时，强行把姓氏框里的多余文字擦除
