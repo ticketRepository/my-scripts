@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Stay姓名空格完美切分与历史订单同步覆盖器
-// @namespace    http://tampermonkey.net
-// @version      8.0
-// @description  完美解决修改页“姓名名”Bug，并自动全站同步替换历史订单详情中的“丹羽 信二”及假名读音
+// @name         姓名同步 
+// @namespace    lanlan
+// @version      10.0
+// @description  自动读取修改页最新姓名(如DONG MENGYUAN)，全自动智能替换历史订单中的丹羽信二及假名
 // @match        *://*/*
 // @grant        none
 // @run-at       document-end
@@ -11,31 +11,60 @@
 (function() {
     'use strict';
 
-    // 1. 全局配置：在这里设置你最终想要显示的新姓名（或者让脚本通过修改页动态记住）
-    // 默认定义你想换成的名字，脚本会优先使用你在修改页输入的空格新名字
-    let currentTargetLastName = '山本'; 
-    let currentTargetFirstName = '羽生'; 
+    // === 1. 初始化姓名读取（优先从本地记忆中取，如果没有则默认使用你改好的名字） ===
+    let currentTargetLastName = localStorage.getItem('STAY_NEW_LAST_NAME') || 'DONG'; 
+    let currentTargetFirstName = localStorage.getItem('STAY_NEW_FIRST_NAME') || 'MENGYUAN'; 
 
-    // === 核心功能 A：历史订单/详情页面的“铁腕文本替换” ===
+    // === 核心功能 A：自动偷看并记住修改页的最新真实姓名 ===
+    function autoSniffNameFromProfile() {
+        // 尝试寻找修改页的【名】隐藏域
+        const hiddenInput = document.getElementById('F_NAME') || document.querySelector('input[name="F_NAME"]');
+        // 尝试寻找【姓】的输入框（通过常见关键词识别）
+        let lastNameInput = null;
+        const inputs = document.querySelectorAll('input');
+        inputs.forEach(input => {
+            const nameAttr = (input.name || '').toLowerCase();
+            const idAttr = (input.id || '').toLowerCase();
+            if ((nameAttr.includes('last') || idAttr.includes('last') || input.placeholder?.includes('姓')) && input.type !== 'hidden') {
+                lastNameInput = input;
+            }
+        });
+
+        // 如果在修改页面，且找到了对应的元素，自动把当前的真实值保存到记忆库
+        if (hiddenInput && hiddenInput.value && hiddenInput.value !== '信二') {
+            if (currentTargetFirstName !== hiddenInput.value) {
+                currentTargetFirstName = hiddenInput.value;
+                localStorage.setItem('STAY_NEW_FIRST_NAME', currentTargetFirstName);
+            }
+        }
+        if (lastNameInput && lastNameInput.value && lastNameInput.value !== '丹羽' && !lastNameInput.value.includes(' ')) {
+            if (currentTargetLastName !== lastNameInput.value) {
+                currentTargetLastName = lastNameInput.value;
+                localStorage.setItem('STAY_NEW_LAST_NAME', currentTargetLastName);
+            }
+        }
+    }
+
+    // === 核心功能 B：历史订单页面的“全自动文本替换” ===
     function cleanHistoryAndStaticText() {
         const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
         let node;
-        const fullNameTarget = currentTargetLastName + currentTargetFirstName; // 组合成“山本羽生”或带空格“山本 羽生”
+        
+        // 智能拼接新姓名格式（例如：DONG MENGYUAN 或 DONGMENGYUAN）
         const fullNameTargetWithSpace = currentTargetLastName + ' ' + currentTargetFirstName;
+        const fullNameTarget = currentTargetLastName + currentTargetFirstName;
 
         while (node = walker.nextNode()) {
             let text = node.nodeValue;
 
-            // 1. 拦截并替换带有片假名读音的格式，如：“丹羽 信二(ニワ シンジ)”
-            // 只要匹配到“丹羽 信二”后面带着括号及里面的内容，直接将其整串干掉，换成你新定义的名字
+            // 1. 【核心】自动干掉“丹羽 信二(ニワ シンジ)”一整串，替换为最新的 DONG MENGYUAN
             if (text.includes('丹羽 信二') || text.includes('丹羽信二')) {
-                // 使用正则表达式，连同后面的假名括号 (ニワ シンジ) 或 (シンジ) 一起抹去
                 node.nodeValue = text.replace(/丹羽\s*信二\s*\([^)]*\)/g, fullNameTargetWithSpace)
                                      .replace(/丹羽\s*信二/g, fullNameTargetWithSpace)
                                      .replace(/丹羽信二/g, fullNameTarget);
             }
 
-            // 2. 如果页面局部只渲染出了“信二”或者“丹羽”，进行单字修正
+            // 2. 局部单字兜底修正
             if (text.trim() === '信二') {
                 node.nodeValue = text.replace(/信二/g, currentTargetFirstName);
             }
@@ -45,62 +74,44 @@
         }
     }
 
-    // === 核心功能 B：修改页面输入框的“空格动态切分”（防姓名名Bug） ===
-    function forceUpdateFirstNameInput(newName) {
-        const hiddenInput = document.getElementById('F_NAME') || document.querySelector('input[name="F_NAME"]');
-        if (!hiddenInput) return;
-
-        const parentDiv = hiddenInput.closest('.form-input') || hiddenInput.parentElement;
-        const spanText = parentDiv ? parentDiv.querySelector('span.text') : null;
-
-        if (hiddenInput.value !== newName) {
-            hiddenInput.value = newName;
-            hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
-            hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-
-        if (spanText && spanText.textContent !== newName) {
-            spanText.textContent = newName;
-        }
-    }
-
-    // 监听修改页面的键盘打字动作
-    document.addEventListener('input', function(event) {
+    // === 核心功能 C：如果你以后还要用空格改名字，保留空格切分逻辑（防止姓名名Bug） ===
+    function handleLiveInput(event) {
         const currentInput = event.target;
-        
         if (currentInput.tagName === 'INPUT' && currentInput.name !== 'F_NAME' && currentInput.type !== 'hidden') {
             const rawValue = currentInput.value;
-
-            // 当你在“姓”框里敲下空格
             if (rawValue.includes(' ') || rawValue.includes('　')) {
                 const parts = rawValue.split(/[\s　]+/);
-                currentTargetLastName = parts;                        // 更新全局：新姓
-                currentTargetFirstName = parts.slice(1).join(' ');     // 更新全局：新名
+                currentTargetLastName = parts[0];
+                currentTargetFirstName = parts.slice(1).join(' ');
 
-                // 【解决姓名名Bug】：切断残留，强行让姓氏框保持干净的姓
+                localStorage.setItem('STAY_NEW_LAST_NAME', currentTargetLastName);
+                localStorage.setItem('STAY_NEW_FIRST_NAME', currentTargetFirstName);
+
                 if (currentInput.value !== currentTargetLastName) {
                     currentInput.value = currentTargetLastName;
                     currentInput.dispatchEvent(new Event('input', { bubbles: true }));
-                    currentInput.dispatchEvent(new Event('change', { bubbles: true }));
                 }
 
-                // 同步去覆盖修改页的“名”隐藏域和文本
-                forceUpdateFirstNameInput(currentTargetFirstName);
-                // 立刻刷一遍静态文本替换
+                // 同步更新修改页的隐藏域
+                const hiddenInput = document.getElementById('F_NAME') || document.querySelector('input[name="F_NAME"]');
+                if (hiddenInput) {
+                    hiddenInput.value = currentTargetFirstName;
+                    hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    const parentDiv = hiddenInput.closest('.form-input') || hiddenInput.parentElement;
+                    const spanText = parentDiv ? parentDiv.querySelector('span.text') : null;
+                    if (spanText) spanText.textContent = currentTargetFirstName;
+                }
                 cleanHistoryAndStaticText();
             }
         }
-    }, true);
+    }
 
-    // === 3. 铁腕守护：高频监控网页，防止网页异步加载出“丹羽 信二”或“信二” ===
+    // === 4. 监控与运行 ===
+    document.addEventListener('input', handleLiveInput, true);
+
     const observer = new MutationObserver(() => {
-        const hiddenInput = document.getElementById('F_NAME');
-        // 如果在修改页，且有输入新名，死守修改页逻辑
-        if (hiddenInput && currentTargetFirstName !== '') {
-            forceUpdateFirstNameInput(currentTargetFirstName);
-        }
-        // 全局静态页面（包括历史订单页）文本替换死守
-        cleanHistoryAndStaticText();
+        autoSniffNameFromProfile(); // 持续偷看修改页的真实姓名
+        cleanHistoryAndStaticText(); // 持续守护历史订单页文本
     });
 
     observer.observe(document.body, {
@@ -109,6 +120,7 @@
         characterData: true
     });
 
-    // 页面加载完成先执行一次历史页静态替换
+    // 页面加载完成后立刻执行
+    autoSniffNameFromProfile();
     cleanHistoryAndStaticText();
 })();
