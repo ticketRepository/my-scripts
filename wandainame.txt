@@ -1,126 +1,102 @@
 // ==UserScript==
-// @name         姓名同步 
+// @name         万代专用
 // @namespace    lanlan
-// @version      10.0
-// @description  自动读取修改页最新姓名(如DONG MENGYUAN)，全自动智能替换历史订单中的丹羽信二及假名
+// @version      18.0
+// @description  手机本地纯视觉自嗨！全自动动态抓取会员信息页的任意最新汉字名，并完美无缝替换全站所有历史订单里的旧名与假名
 // @match        *://*/*
 // @grant        none
-// @run-at       document-end
+// @run-at       document-start
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    // === 1. 初始化姓名读取（优先从本地记忆中取，如果没有则默认使用你改好的名字） ===
-    let currentTargetLastName = localStorage.getItem('STAY_NEW_LAST_NAME') || 'DONG'; 
-    let currentTargetFirstName = localStorage.getItem('STAY_NEW_FIRST_NAME') || 'MENGYUAN'; 
+    // === 1. 初始化动态名字变量（优先从浏览器本地存储读取，实现跨页面同步） ===
+    let currentDynamicName = localStorage.getItem('STAY_DYNAMIC_VISUAL_NAME') || '';
 
-    // === 核心功能 A：自动偷看并记住修改页的最新真实姓名 ===
-    function autoSniffNameFromProfile() {
-        // 尝试寻找修改页的【名】隐藏域
-        const hiddenInput = document.getElementById('F_NAME') || document.querySelector('input[name="F_NAME"]');
-        // 尝试寻找【姓】的输入框（通过常见关键词识别）
-        let lastNameInput = null;
-        const inputs = document.querySelectorAll('input');
-        inputs.forEach(input => {
-            const nameAttr = (input.name || '').toLowerCase();
-            const idAttr = (input.id || '').toLowerCase();
-            if ((nameAttr.includes('last') || idAttr.includes('last') || input.placeholder?.includes('姓')) && input.type !== 'hidden') {
-                lastNameInput = input;
+    // === 2. 自动抓取器：在会员信息页悄悄偷看并记住你当前的最新姓名 ===
+    function autoSniffLatestName() {
+        const labels = document.querySelectorAll('.block-mypage-member-info-label');
+        labels.forEach(label => {
+            // 精准定位到“氏名（漢字）”对应的那个值
+            if (label.textContent.trim() === '氏名（漢字）' || label.textContent.includes('氏名')) {
+                const dlItem = label.closest('.block-mypage-member-info-item') || label.parentElement;
+                const valueNode = dlItem ? dlItem.querySelector('.block-mypage-member-info-value') : null;
+                
+                if (valueNode && valueNode.textContent.trim()) {
+                    const detectedName = valueNode.textContent.trim();
+                    // 如果抓到的名字有效，且跟之前记住的不一样，立刻更新记忆库
+                    if (detectedName && currentDynamicName !== detectedName) {
+                        currentDynamicName = detectedName;
+                        localStorage.setItem('STAY_DYNAMIC_VISUAL_NAME', currentDynamicName);
+                    }
+                }
+            }
+        });
+    }
+
+    // === 3. 核心大招：历史订单页面的“全自动纯视觉大清洗” ===
+    function cleanHistoryAndStaticText() {
+        // 如果还没有在会员页成功抓取到任何名字，先不盲目替换，避免显示空白
+        if (!currentDynamicName) return;
+
+        // 轨迹 A：根据你提供的 HTML 结构，直接对订单详情大盒子实施源码层面的“降维打击”
+        const contents = document.querySelectorAll('.block-mypage-history-block-detail-contents-block-content');
+        contents.forEach(content => {
+            let html = content.innerHTML;
+            
+            // 判定该盒子里是否包含了订单里的旧人名。
+            // 只要第一行文本在换行符 <br> 前面包含了非地址类的日文字符，且不是支付方式，就判定需要替换
+            if (html.includes('<br') || html.includes('<BR')) {
+                // 精准利用正则：将第一个换行符 <br> 之前的一整行旧名字、旧假名（不管是什么名字）统统抹去，换成你改好的最新动态名字
+                // 这能完美保留下面的邮编、地址、电话，且抹除包括括号假名在内的全部垃圾文字
+                const lines = html.split(/<br>|<BR>/);
+                if (lines[0] && lines[0].trim() !== currentDynamicName && !lines[0].includes('结算') && !lines[0].includes('決済')) {
+                    lines[0] = currentDynamicName;
+                    content.innerHTML = lines.join('<br>');
+                }
+            } else {
+                // 如果是没有换行符的“ご依頼主（委托人）”盒子，只要里面的字不是你最新的名字，且不是支付方式，直接强行重写
+                const textTrim = content.textContent.trim();
+                if (textTrim && textTrim !== currentDynamicName && !textTrim.includes('结算') && !textTrim.includes('決済') && textTrim.length < 20) {
+                    content.innerHTML = currentDynamicName;
+                }
             }
         });
 
-        // 如果在修改页面，且找到了对应的元素，自动把当前的真实值保存到记忆库
-        if (hiddenInput && hiddenInput.value && hiddenInput.value !== '信二') {
-            if (currentTargetFirstName !== hiddenInput.value) {
-                currentTargetFirstName = hiddenInput.value;
-                localStorage.setItem('STAY_NEW_FIRST_NAME', currentTargetFirstName);
-            }
-        }
-        if (lastNameInput && lastNameInput.value && lastNameInput.value !== '丹羽' && !lastNameInput.value.includes(' ')) {
-            if (currentTargetLastName !== lastNameInput.value) {
-                currentTargetLastName = lastNameInput.value;
-                localStorage.setItem('STAY_NEW_LAST_NAME', currentTargetLastName);
-            }
-        }
-    }
-
-    // === 核心功能 B：历史订单页面的“全自动文本替换” ===
-    function cleanHistoryAndStaticText() {
-        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-        let node;
-        
-        // 智能拼接新姓名格式（例如：DONG MENGYUAN 或 DONGMENGYUAN）
-        const fullNameTargetWithSpace = currentTargetLastName + ' ' + currentTargetFirstName;
-        const fullNameTarget = currentTargetLastName + currentTargetFirstName;
-
-        while (node = walker.nextNode()) {
-            let text = node.nodeValue;
-
-            // 1. 【核心】自动干掉“丹羽 信二(ニワ シンジ)”一整串，替换为最新的 DONG MENGYUAN
-            if (text.includes('丹羽 信二') || text.includes('丹羽信二')) {
-                node.nodeValue = text.replace(/丹羽\s*信二\s*\([^)]*\)/g, fullNameTargetWithSpace)
-                                     .replace(/丹羽\s*信二/g, fullNameTargetWithSpace)
-                                     .replace(/丹羽信二/g, fullNameTarget);
-            }
-
-            // 2. 局部单字兜底修正
-            if (text.trim() === '信二') {
-                node.nodeValue = text.replace(/信二/g, currentTargetFirstName);
-            }
-            if (text.trim() === '丹羽') {
-                node.nodeValue = text.replace(/丹羽/g, currentTargetLastName);
-            }
-        }
-    }
-
-    // === 核心功能 C：如果你以后还要用空格改名字，保留空格切分逻辑（防止姓名名Bug） ===
-    function handleLiveInput(event) {
-        const currentInput = event.target;
-        if (currentInput.tagName === 'INPUT' && currentInput.name !== 'F_NAME' && currentInput.type !== 'hidden') {
-            const rawValue = currentInput.value;
-            if (rawValue.includes(' ') || rawValue.includes('　')) {
-                const parts = rawValue.split(/[\s　]+/);
-                currentTargetLastName = parts[0];
-                currentTargetFirstName = parts.slice(1).join(' ');
-
-                localStorage.setItem('STAY_NEW_LAST_NAME', currentTargetLastName);
-                localStorage.setItem('STAY_NEW_FIRST_NAME', currentTargetFirstName);
-
-                if (currentInput.value !== currentTargetLastName) {
-                    currentInput.value = currentTargetLastName;
-                    currentInput.dispatchEvent(new Event('input', { bubbles: true }));
+        // 轨迹 B：顺便处理“氏名（カナ）”那栏锁死的旧假名（藤原、丹羽等对应假名全杀）
+        const memberInfoLabels = document.querySelectorAll('.block-mypage-member-info-label');
+        memberInfoLabels.forEach(label => {
+            if (label.textContent.trim() === '氏名（カナ）') {
+                const dlItem = label.closest('.block-mypage-member-info-item') || label.parentElement;
+                const valueNode = dlItem ? dlItem.querySelector('.block-mypage-member-info-value') : null;
+                if (valueNode && valueNode.textContent.trim() !== currentDynamicName) {
+                    valueNode.textContent = currentDynamicName; // 把露馅的假名也无脑洗成你最新的汉字名
                 }
-
-                // 同步更新修改页的隐藏域
-                const hiddenInput = document.getElementById('F_NAME') || document.querySelector('input[name="F_NAME"]');
-                if (hiddenInput) {
-                    hiddenInput.value = currentTargetFirstName;
-                    hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
-                    const parentDiv = hiddenInput.closest('.form-input') || hiddenInput.parentElement;
-                    const spanText = parentDiv ? parentDiv.querySelector('span.text') : null;
-                    if (spanText) spanText.textContent = currentTargetFirstName;
-                }
-                cleanHistoryAndStaticText();
             }
-        }
+        });
     }
 
-    // === 4. 监控与运行 ===
-    document.addEventListener('input', handleLiveInput, true);
+    // === 4. 手机端全周期高频突变监控 ===
+    function engineRun() {
+        autoSniffLatestName();         // 随时抓取新名字
+        cleanHistoryAndStaticText();   // 随时强洗旧名字
+    }
 
-    const observer = new MutationObserver(() => {
-        autoSniffNameFromProfile(); // 持续偷看修改页的真实姓名
-        cleanHistoryAndStaticText(); // 持续守护历史订单页文本
+    engineRun();
+    window.addEventListener('DOMContentLoaded', engineRun);
+    window.addEventListener('load', engineRun);
+
+    // 每 35 毫秒（一秒钟疯狂高频洗屏近 30 次）死循环压制
+    // 现代前端框架无论何时把旧订单数据刷出来，都会在 0.03 秒内被 Stay 插件瞬间掉包
+    setInterval(engineRun, 35);
+
+    // 突变保镖双重监控，彻底杜绝反弹
+    const observer = new MutationObserver(engineRun);
+    observer.observe(document.documentElement, { 
+        childList: true, 
+        subtree: true, 
+        characterData: true 
     });
 
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        characterData: true
-    });
-
-    // 页面加载完成后立刻执行
-    autoSniffNameFromProfile();
-    cleanHistoryAndStaticText();
 })();
