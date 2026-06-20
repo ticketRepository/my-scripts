@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         万代全能匹配2.0
+// @name         Stay全局姓名对齐器 (23.0极致流畅卡券版)
 // @namespace    lanlan
-// @version      2.0
-// @description 
+// @version      3.0
+// @description  对Ticket/Coupon卡券页面名字的自动同步与替换
 // @match        *://*/*
 // @grant        none
 // @run-at       document-end
@@ -45,11 +45,19 @@
 
     let currentKatakanaName = convertRomajiToKatakana(myCustomName);
 
-    // === 清洗函数 ===
+    // === 核心清洗函数 ===
     function cleanWebPageVisuals() {
         if (!myCustomName) return;
 
-        // 【优化项 1】：使用极速选择器直接锁定
+        // 【新增适配】：精准秒改卡券/入场券详情里的旧名字 (藤原 武尊)
+        const couponNameNodes = document.querySelectorAll('.block-mypage-coupon-list-item-code-value');
+        couponNameNodes.forEach(node => {
+            if (node.textContent.trim() !== myCustomName && !node.textContent.includes('EC-')) {
+                node.textContent = myCustomName; // 纯视觉无痕改写为你的全新汉字名
+            }
+        });
+
+        // 历史订单
         const contents = document.querySelectorAll('.block-mypage-history-block-detail-contents-block-content');
         contents.forEach(content => {
             let html = content.innerHTML;
@@ -59,7 +67,6 @@
                 if (lines && lines.length > 0) {
                     const firstLineText = lines[0].trim();
                     const expectedLine = myCustomName + "(" + currentKatakanaName + ")";
-                    // 【优化项 2】：增加缓存防线，只有对不上的时候才准修改DOM，防止死循环重绘
                     if (firstLineText !== myCustomName && firstLineText !== expectedLine && !html.includes('決済') && !html.includes('结算')) {
                         lines[0] = expectedLine; 
                         content.innerHTML = lines.join('<br>');
@@ -73,7 +80,7 @@
             }
         });
 
-        // 会员页面的精准更新
+        // 会员页面
         const labels = document.querySelectorAll('.block-mypage-member-info-label');
         labels.forEach(label => {
             const labelText = label.textContent.trim();
@@ -93,18 +100,18 @@
         });
     }
 
-    // === 【优化项 3】：防抖节流阀（Debounce）===
-    // DOM优化
+    // 防抖节流
     let debounceTimer = null;
     function debounceWash() {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(cleanWebPageVisuals, 20);
     }
 
-    // 双击触发
+    // 双击触发交互（双击会员情报或者双击页面空白处的“券”等字眼皆可触发）
     document.addEventListener('dblclick', function(event) {
-        if (event.target.textContent.includes('会員情報') || event.target.textContent.includes('会员')) {
-            const userInput = prompt("输入英文名：", myCustomName || "DONG MENGYUAN");
+        const text = event.target.textContent;
+        if (text.includes('会員情報') || text.includes('会员') || text.includes('チケット') || text.includes('券')) {
+            const userInput = prompt("【Stay 极致流畅版】请输入英文名字：", myCustomName || "DONG MENGYUAN");
             if (userInput !== null) {
                 const trimmedInput = userInput.trim();
                 if (trimmedInput) {
@@ -117,8 +124,7 @@
         }
     });
 
-    // === 启动轻量监控 ===
-    // 防抖
+    // 监控驱动
     window.addEventListener('DOMContentLoaded', cleanWebPageVisuals);
     window.addEventListener('load', cleanWebPageVisuals);
 
