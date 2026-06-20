@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         万代全能匹配
+// @name         万代全能匹配2.0
 // @namespace    lanlan
 // @version      2.0
 // @description 
