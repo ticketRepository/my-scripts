@@ -2,7 +2,7 @@
 // @name         万代姓名修改
 // @namespace    lanlan
 // @version      3.0
-// @description  对Ticket/Coupon卡券页面名字的自动同步与替换
+// @description  lanlan
 // @match        *://*/*
 // @grant        none
 // @run-at       document-end
