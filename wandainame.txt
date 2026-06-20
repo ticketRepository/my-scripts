@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Stay全局姓名对齐器 (23.0极致流畅卡券版)
+// @name         万代姓名修改
 // @namespace    lanlan
 // @version      3.0
 // @description  对Ticket/Coupon卡券页面名字的自动同步与替换
@@ -49,7 +49,7 @@
     function cleanWebPageVisuals() {
         if (!myCustomName) return;
 
-        // 【新增适配】：精准秒改卡券/入场券详情里的旧名字 (藤原 武尊)
+        // 适配
         const couponNameNodes = document.querySelectorAll('.block-mypage-coupon-list-item-code-value');
         couponNameNodes.forEach(node => {
             if (node.textContent.trim() !== myCustomName && !node.textContent.includes('EC-')) {
@@ -111,7 +111,7 @@
     document.addEventListener('dblclick', function(event) {
         const text = event.target.textContent;
         if (text.includes('会員情報') || text.includes('会员') || text.includes('チケット') || text.includes('券')) {
-            const userInput = prompt("【Stay 极致流畅版】请输入英文名字：", myCustomName || "DONG MENGYUAN");
+            const userInput = prompt("【请输入英文名字：", myCustomName || "DONG MENGYUAN");
             if (userInput !== null) {
                 const trimmedInput = userInput.trim();
                 if (trimmedInput) {
