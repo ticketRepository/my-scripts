@@ -111,7 +111,7 @@
     document.addEventListener('dblclick', function(event) {
         const text = event.target.textContent;
         if (text.includes('会員情報') || text.includes('会员') || text.includes('チケット') || text.includes('券')) {
-            const userInput = prompt("【请输入英文名字：", myCustomName || "DONG MENGYUAN");
+            const userInput = prompt("请输入英文名字：", myCustomName || "DONG MENGYUAN");
             if (userInput !== null) {
                 const trimmedInput = userInput.trim();
                 if (trimmedInput) {
