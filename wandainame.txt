@@ -1,96 +1,133 @@
 // ==UserScript==
-// @name         万代匹配
+// @name         万代全能匹配
 // @namespace    lanlan
-// @version      19.0
-// @description  手机本地纯视觉自嗨！全自动动态抓取会员页的【氏名（漢字）】，完美覆盖替换历史订单里的任何旧名与假名
+// @version      2.0
+// @description 
 // @match        *://*/*
 // @grant        none
-// @run-at       document-start
+// @run-at       document-end
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    // === 1. 从浏览器本地存储中读取之前记住的【氏名（漢字）】（默认为空，等待抓取） ===
-    let currentKanjiName = localStorage.getItem('STAY_STORED_KANJI_NAME') || '';
+    let myCustomName = localStorage.getItem('STAY_CUSTOM_VISUAL_NAME') || '';
 
-    // === 2. 自动抓取引擎：在会员信息页偷看并背下你当前真正的【氏名（漢字）】 ===
-    function sniffKanjiName() {
-        const labels = document.querySelectorAll('.block-mypage-member-info-label');
-        labels.forEach(label => {
-            // 只要匹配到“氏名（漢字）”这个标签
-            if (label.textContent.trim() === '氏名（漢字）') {
-                const dlItem = label.closest('.block-mypage-member-info-item') || label.parentElement;
-                const valueNode = dlItem ? dlItem.querySelector('.block-mypage-member-info-value') : null;
-                
-                if (valueNode && valueNode.textContent.trim()) {
-                    const detected = valueNode.textContent.trim();
-                    // 如果抓到了有效的名字（比如 DONG MENGYUAN 或是任何新名字），且和记忆中不同，立刻同步
-                    if (detected && currentKanjiName !== detected) {
-                        currentKanjiName = detected;
-                        localStorage.setItem('STAY_STORED_KANJI_NAME', currentKanjiName);
+    function convertRomajiToKatakana(romajiText) {
+        if (!romajiText) return "";
+        let text = romajiText.toUpperCase().trim();
+        if (text === "DONG MENGYUAN" || text === "DONGMENGYUAN") return "ドン メンユアン";
+        if (text === "YAMAMOTO HANYU" || text === "YAMAMOTOHANYU") return "ヤマモト ハニュウ";
+
+        const mapping = {
+            'CHENG': 'チェン', 'LIU': 'リュウ', 'WANG': 'ワン', 'ZHANG': 'ジャン', 'YANG': 'ヤン', 'HUANG': 'ファン',
+            'ZHAO': 'ジャオ', 'ZHOU': 'ジョウ', 'WU': 'ウー', 'XU': 'シュー', 'SUN': 'スン', 'GAO': 'ガオ', 'LIN': 'リン',
+            'MENG': 'メン', 'YUAN': 'ユアン', 'DONG': 'ドン', 'A': 'ア', 'I': 'イ', 'U': 'ウ', 'E': 'エ', 'O': 'オ'
+        };
+
+        let words = text.split(/[\s　]+/);
+        let resultWords = words.map(word => {
+            let kana = ""; let i = 0;
+            while (i < word.length) {
+                let matched = false;
+                for (let len = 4; len > 0; len--) {
+                    if (i + len <= word.length) {
+                        let substr = word.substr(i, len);
+                        if (mapping[substr]) { kana += mapping[substr]; i += len; matched = true; break; }
                     }
                 }
+                if (!matched) i++;
             }
+            return kana;
         });
+        return resultWords.filter(w => w.length > 0).join(' ');
     }
 
-    // === 3. 核心替换引擎：在历史订单页面进行全自动智能大清洗 ===
-    function cleanHistoryOrderText() {
-        // 如果浏览器记忆里还没存下你的【氏名（漢字）】，暂时不轻举妄动
-        if (!currentKanjiName) return;
+    let currentKatakanaName = convertRomajiToKatakana(myCustomName);
 
-        // 精准定位到你提供源码的两个历史详情大盒子
+    // === 清洗函数 ===
+    function cleanWebPageVisuals() {
+        if (!myCustomName) return;
+
+        // 【优化项 1】：使用极速选择器直接锁定
         const contents = document.querySelectorAll('.block-mypage-history-block-detail-contents-block-content');
         contents.forEach(content => {
             let html = content.innerHTML;
             
-            // 场景 A：处理带有换行符地址的“お届け先（收件人）”大盒子
             if (html.includes('<br') || html.includes('<BR')) {
-                // 用换行符把内容切成一排一排的数组
                 const lines = html.split(/<br>|<BR>/i);
                 if (lines && lines.length > 0) {
                     const firstLineText = lines[0].trim();
-                    
-                    // 只要第一行还没变成你当前的【氏名（漢字）】，且不是支付方式
-                    if (firstLineText !== currentKanjiName && !html.includes('決済') && !html.includes('结算')) {
-                        // 【核心操作】直接把第一行原本的“旧人名(旧假名)”整行抹除，替换为你最想要的【氏名（漢字）】
-                        lines[0] = currentKanjiName;
+                    const expectedLine = myCustomName + "(" + currentKatakanaName + ")";
+                    // 【优化项 2】：增加缓存防线，只有对不上的时候才准修改DOM，防止死循环重绘
+                    if (firstLineText !== myCustomName && firstLineText !== expectedLine && !html.includes('決済') && !html.includes('结算')) {
+                        lines[0] = expectedLine; 
                         content.innerHTML = lines.join('<br>');
                     }
                 }
             } else {
-                // 场景 B：处理没有换行的“ご依頼主（委托人）”大盒子
                 const textTrim = content.textContent.trim();
-                // 只要盒子里面的旧名字跟【氏名（漢字）】不一致，且不是支付方式，直接强行对齐重写
-                if (textTrim && textTrim !== currentKanjiName && !textTrim.includes('決済') && !textTrim.includes('结算') && textTrim.length < 30) {
-                    content.innerHTML = currentKanjiName;
+                if (textTrim && textTrim !== myCustomName && !textTrim.includes('決済') && !textTrim.includes('结算') && textTrim.length < 30) {
+                    content.innerHTML = myCustomName;
+                }
+            }
+        });
+
+        // 会员页面的精准更新
+        const labels = document.querySelectorAll('.block-mypage-member-info-label');
+        labels.forEach(label => {
+            const labelText = label.textContent.trim();
+            if (labelText === '氏名（漢字）' || labelText === '氏名（カナ）') {
+                const dlItem = label.closest('.block-mypage-member-info-item') || label.parentElement;
+                const valueNode = dlItem ? dlItem.querySelector('.block-mypage-member-info-value') : null;
+
+                if (valueNode) {
+                    if (labelText === '氏名（漢字）' && valueNode.textContent.trim() !== myCustomName) {
+                        valueNode.textContent = myCustomName;
+                    }
+                    if (labelText === '氏名（カナ）' && valueNode.textContent.trim() !== currentKatakanaName) {
+                        valueNode.textContent = currentKatakanaName;
+                    }
                 }
             }
         });
     }
 
-    // === 4. 手机端全周期无脑压制运作 ===
-    function runEngine() {
-        sniffKanjiName();          // 随时抓取最新的【氏名（漢字）】
-        cleanHistoryOrderText();   // 随时强洗订单页面
+    // === 【优化项 3】：防抖节流阀（Debounce）===
+    // DOM优化
+    let debounceTimer = null;
+    function debounceWash() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(cleanWebPageVisuals, 20);
     }
 
-    // 各个网页加载阶段全力卡位
-    runEngine();
-    window.addEventListener('DOMContentLoaded', runEngine);
-    window.addEventListener('load', runEngine);
+    // 双击触发
+    document.addEventListener('dblclick', function(event) {
+        if (event.target.textContent.includes('会員情報') || event.target.textContent.includes('会员')) {
+            const userInput = prompt("输入英文名：", myCustomName || "DONG MENGYUAN");
+            if (userInput !== null) {
+                const trimmedInput = userInput.trim();
+                if (trimmedInput) {
+                    myCustomName = trimmedInput;
+                    currentKatakanaName = convertRomajiToKatakana(myCustomName);
+                    localStorage.setItem('STAY_CUSTOM_VISUAL_NAME', myCustomName);
+                    cleanWebPageVisuals();
+                }
+            }
+        }
+    });
 
-    // 每隔 35 毫秒（一秒钟疯狂洗屏 28 次）启动高频死循环压制
-    // 无论网页底层的 React/Vue 怎么异步回刷旧数据，它在手机屏幕刚露头的瞬间就会被 Stay 直接掉包
-    setInterval(runEngine, 35);
+    // === 启动轻量监控 ===
+    // 防抖
+    window.addEventListener('DOMContentLoaded', cleanWebPageVisuals);
+    window.addEventListener('load', cleanWebPageVisuals);
 
-    // 突变保镖双重监控，彻底封死反弹路径
-    const observer = new MutationObserver(runEngine);
+    const observer = new MutationObserver(debounceWash);
     observer.observe(document.documentElement, { 
         childList: true, 
         subtree: true, 
         characterData: true 
     });
 
+    cleanWebPageVisuals();
 })();
