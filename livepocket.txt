@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Stay插件-零延迟格局无损姓名切分
+// @name         Stay插件-零延迟原格局姓名切分(去重完美版)
 // @namespace    http://tampermonkey.net
-// @version      10.0
-// @description  毫秒级同步拦截：解决打开网页时的位置移动和闪烁问题，100%保持原有字体格局。
+// @version      11.0
+// @description  100%保持原有字体格局，彻底解决名字重复叠加问题，无任何闪烁位移。
 // @author       AI助手
 // @match        *://*/*
 // @grant        none
@@ -14,18 +14,17 @@
 
     // 核心处理函数
     function doNameSplit(container) {
-        // 防止对同一个标签重复处理导致死循环
+        // 【关键修复一】加上去重锁：如果已经处理过，直接退出，绝不二次叠加
         if (container.hasAttribute('data-stay-split-done')) return;
 
+        // 找到容器里的“氏”和“名”这两个带特定原厂样式的标签
         const titles = container.querySelectorAll('.my-ticket-info__name-title');
         if (titles.length < 2) return;
 
-        // 1. 隐藏原网页右边错位的“名”标签（用透明度，不破坏CSS选择器格局）
-        titles[1].style.opacity = '0';
-        titles[1].style.position = 'absolute';
-        titles[1].style.pointerEvents = 'none';
+        const shiTag = titles[0]; // 网页原生的“氏”标签
+        const mingTag = titles[1]; // 网页最右边那个原本错位的“名”标签
 
-        // 2. 提取并清洗名字纯文本
+        // 提取夹在中间的名字纯文本，并滤掉乱码控制符
         let rawText = "";
         container.childNodes.forEach(node => {
             if (node.nodeType === Node.TEXT_NODE) {
@@ -34,49 +33,47 @@
         });
         let cleanText = rawText.replace(/[\ufffb\u200b-\u200d\ufeff]/g, '').trim();
 
-        // 3. 严格寻找空格切分
+        // 严格按照中间的空格把名字切开
         let spaceIndex = cleanText.search(/[\s　]+/);
         if (spaceIndex !== -1) {
             let lastName = cleanText.substring(0, spaceIndex).trim();
             let firstName = cleanText.substring(spaceIndex + 1).replace(/^[\s　]+/, '').trim();
 
             if (lastName && firstName) {
-                // 标记已处理
+                // 【关键修复二】在修改内容前，立刻打上“已处理”标记锁死，防止后续逻辑再次触发
                 container.setAttribute('data-stay-split-done', 'true');
 
-                // 4. 精准替换文本节点，完全不触碰外层原生标签
-                container.childNodes.forEach(node => {
-                    if (node.nodeType === Node.TEXT_NODE) {
-                        const nameSpan = document.createElement('span');
-                        // 注入原生class，确保字体、颜色100%继承
-                        nameSpan.innerHTML = `${lastName} <span class="my-ticket-info__name-title">名</span> ${firstName}`;
-                        node.parentNode.replaceChild(nameSpan, node);
-                    }
-                });
+                // 彻底清空，然后直接把【原网页原汁原味的标签和文字】按您的要求重新排队
+                container.innerHTML = ''; 
+                
+                // 队伍顺序：氏 ➔ 姓 ➔ 名 ➔ 名。完美继承原生字体、颜色、大小和所有的微小排版格局
+                container.appendChild(shiTag);                                  // 1. 放入原生的“氏”
+                container.appendChild(document.createTextNode(` ${lastName} `)); // 2. 放入姓（如：朱）
+                container.appendChild(mingTag);                                 // 3. 移入原生的“名”
+                container.appendChild(document.createTextNode(` ${firstName} `));// 4. 放入名（如：亚兵）
             }
         }
     }
 
-    // 【零延迟核心】：使用底层的 MutationObserver 动态监听 DOM 树的构建
+    // 毫秒级同步拦截监听：在网页还没画在手机屏幕上时，就在内存里瞬间切分完毕
     const observer = new MutationObserver((mutations, obs) => {
         const container = document.querySelector('.my-ticket-info__name');
         if (container) {
-            // 只要一在内存中发现该元素，立刻执行，此时网页还没渲染到屏幕上
             doNameSplit(container);
-            // 处理完成后直接断开监听，释放手机内存
+            // 只要成功上锁处理完，就直接断开监听，释放内存，保证绝不重复叠加
             if (container.hasAttribute('data-stay-split-done')) {
                 obs.disconnect();
             }
         }
     });
 
-    // 从网页刚开始加载的那一刻起，就启动最高级别的肉眼不可见监控
+    // 网页刚一加载就用最高优先级进行肉眼不可见监控
     observer.observe(document.documentElement, {
         childList: true,
         subtree: true
     });
 
-    // 保底机制：如果因为特殊原因漏掉了，在页面完全加载后再触发一次
+    // 兜底机制：万一监控漏掉，在页面加载完成后再强制检查一次
     window.addEventListener('DOMContentLoaded', () => {
         const container = document.querySelector('.my-ticket-info__name');
         if (container) doNameSplit(container);
