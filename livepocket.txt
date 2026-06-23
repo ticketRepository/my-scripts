@@ -2,7 +2,7 @@
 // @name         livepocket 姓名修改
 // @namespace    lanlan
 // @version      4.1
-// @description  最终版。
+// @description  lanlan
 // @author       lanlan
 // @match        https://t.livepocket.jp/*
 // @match        https://livepocket.jp/*
