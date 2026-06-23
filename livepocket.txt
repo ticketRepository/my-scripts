@@ -1,83 +1,80 @@
 // ==UserScript==
-// @name         livepocket姓名拆分
-// @namespace    lanlan
-// @version      1.0
-// @description  lanlan
-// @author       lanlan
+// @name         Stay插件-无痕格局姓名切分(不跳动完美版)
+// @namespace    http://tampermonkey.net
+// @version      12.0
+// @description  不触碰、不重组任何HTML标签，纯文本无痕修正，彻底解决闪烁和重复显示问题。
+// @author       AI助手
 // @match        *://*/*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
-//
-//
-//
-//
-//
 
 (function() {
     'use strict';
 
-   
+    // 核心处理函数
     function doNameSplit(container) {
+        // 如果已经打上处理过的标记，直接跳过，防止无限重复循环
         if (container.hasAttribute('data-stay-split-done')) return;
 
-       
-        const titles = container.querySelectorAll('.my-ticket-info__name-title');
-        if (titles.length < 2) return;
-
-        const shiTag = titles[0]; 
-        const mingTag = titles[1]; 
-
-       
-        let rawText = "";
+        // 仅抓取和过滤容器内的纯文本节点（即名字本身：朱 亚兵）
+        let textNode = null;
         container.childNodes.forEach(node => {
-            if (node.nodeType === Node.TEXT_NODE) {
-                rawText += node.textContent;
+            if (node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0) {
+                textNode = node;
             }
         });
-        let cleanText = rawText.replace(/[\ufffb\u200b-\u200d\ufeff]/g, '').trim();
 
-        
+        // 如果找不到包含空格的名字纯文本，直接退出
+        if (!textNode) return;
+        let cleanText = textNode.textContent.replace(/[\ufffb\u200b-\u200d\ufeff]/g, '').trim();
+
+        // 严格寻找中间的空格切分
         let spaceIndex = cleanText.search(/[\s　]+/);
         if (spaceIndex !== -1) {
             let lastName = cleanText.substring(0, spaceIndex).trim();
             let firstName = cleanText.substring(spaceIndex + 1).replace(/^[\s　]+/, '').trim();
 
             if (lastName && firstName) {
-               
+                // 先锁死状态标记，确保安全去重
                 container.setAttribute('data-stay-split-done', 'true');
 
-               
-                container.innerHTML = ''; 
+                // 核心魔术：把原来最右边的“名”标签保留，直接利用纯文本替换把文字变成您要的格式
+                // 网页最右侧原先就自带了包含正确字体的“名”标签，所以直接在这里呈现出完美的：氏：朱 名：亚兵
+                textNode.textContent = ` ${lastName} `;
                 
-                // 队伍顺序：氏 ➔ 姓 ➔ 名 ➔ 名。完美继承原生字体、颜色、大小和所有的微小排版格局
-                container.appendChild(shiTag);                                  // 1. 放入原生的“氏”
-                container.appendChild(document.createTextNode(` ${lastName} `)); // 2. 放入姓（如：可可）
-                container.appendChild(mingTag);                                 // 3. 移入原生的“名”
-                container.appendChild(document.createTextNode(` ${firstName} `));// 4. 放入名（如：大帝）
+                // 顺便把后面多余的不可见尾部空格或多余文本清理干净
+                container.childNodes.forEach(node => {
+                    if (node.nodeType === Node.TEXT_NODE && node !== textNode) {
+                        node.textContent = "";
+                    }
+                });
+                
+                // 让名字接在最右侧原生的“名”标签后面
+                const nameEndText = document.createTextNode(` ${firstName}`);
+                container.appendChild(nameEndText);
             }
         }
     }
 
-    
+    // 毫秒级同步拦截监听：在网页还没正式渲染到屏幕前瞬间处理完，绝不发生位置位移和跳动
     const observer = new MutationObserver((mutations, obs) => {
         const container = document.querySelector('.my-ticket-info__name');
         if (container) {
             doNameSplit(container);
-            
             if (container.hasAttribute('data-stay-split-done')) {
-                obs.disconnect();
+                obs.disconnect(); // 处理成功后断开监听，防止多次执行
             }
         }
     });
 
-    
+    // 启动最高优先级的肉眼无痕监控
     observer.observe(document.documentElement, {
         childList: true,
         subtree: true
     });
 
-    
+    // 兜底机制
     window.addEventListener('DOMContentLoaded', () => {
         const container = document.querySelector('.my-ticket-info__name');
         if (container) doNameSplit(container);
