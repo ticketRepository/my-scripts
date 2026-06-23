@@ -9,69 +9,30 @@
 // @run-at       document-end
 // ==/UserScript==
 
-function() {
+(function() {
     'use strict';
 
-    // 1. 极其全面的“姓”与“名”输入框特征匹配库（覆盖中、英、日等主流网站表单）
-    const lastNameSelectors = [
-        'input[name*="lastname" i]', 'input[name*="last_name" i]', 'input[id*="lastname" i]', 'input[id*="last_name" i]',
-        'input[placeholder*="姓" i]', 'input[placeholder*="Last name" i]', 'input[autocomplete="family-name"]',
-        'input[placeholder*="氏" i]', 'input[name*="sei" i]', 'input[id*="sei" i]' // 新增日文“氏/姓”支持
-    ];
-    
-    const firstNameSelectors = [
-        'input[name*="firstname" i]', 'input[name*="first_name" i]', 'input[id*="firstname" i]', 'input[id*="first_name" i]',
-        'input[placeholder*="名" i]', 'input[placeholder*="First name" i]', 'input[autocomplete="given-name"]',
-        'input[placeholder*="名" i]', 'input[name*="mei" i]', 'input[id*="mei" i]' // 新增日文“名”支持
-    ];
+    // 网页加载后延迟 1 秒执行，确保名字已经加载出来
+    setTimeout(() => {
+        // 1. 精准锁定包含姓名的标签（兼容您提供的各种票务样式类名）
+        const nameEl = document.querySelector('.my-ticket-info__name');
+        if (!nameEl) return;
 
-    // 赋值函数：确保能突破 Vue/React 等现代网页框架的限制，强制刷新数据
-    function triggerInputValue(el, val) {
-        if (!el) return;
-        el.value = val;
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+        // 2. 提取里面的文字，并清洗掉“氏”、“名”和不可见的控制字符（如 ￻）
+        let rawText = nameEl.innerText || nameEl.textContent;
+        let cleanText = rawText.replace(/[氏名]/g, '').replace(/[\ufffb\u200b-\u200d\ufeff]/g, '').trim();
 
-    // 核心通用切分逻辑
-    function processNameSplitting(activeInput) {
-        let text = activeInput.value;
+        // 3. 严格按空格一刀切：前面是姓，后面是名
+        let spaceIndex = cleanText.search(/[\s　]+/);
+        if (spaceIndex !== -1) {
+            let lastName = cleanText.substring(0, spaceIndex).trim();
+            let firstName = cleanText.substring(spaceIndex + 1).replace(/^[\s　]+/, '').trim();
 
-        // 清洗掉一些奇怪的不可见控制字符（例如 ￻ 等），但保留空格
-        text = text.replace(/[\ufffb\u200b-\u200d\ufeff]/g, '');
-
-        // 寻找第一个空格（支持半角空格和全角空格「　」）
-        let spaceIndex = text.search(/[\s　]+/);
-        if (spaceIndex === -1) return; // 没有空格则不处理
-
-        // 严格以第一个空格为界线切分
-        let lastName = text.substring(0, spaceIndex).trim();
-        // 后面所有的内容都归为“名”
-        let firstName = text.substring(spaceIndex + 1).replace(/^[\s　]+/, '').trim();
-
-        // 如果用户刚敲下空格，后面还没开始输名字，先不触发
-        if (!firstName) return;
-
-        // 自动寻找当前页面上的“姓”和“名”输入框
-        let lastNameInput = null;
-        let firstNameInput = null;
-
-        for (let s of lastNameSelectors) { let el = document.querySelector(s); if (el) { lastNameInput = el; break; } }
-        for (let s of firstNameSelectors) { let el = document.querySelector(s); if (el) { firstNameInput = el; break; } }
-
-        // 只有当页面上同时存在“姓”和“名”的输入框时，才执行自动拆分填充
-        if (lastNameInput && firstNameInput) {
-            triggerInputValue(lastNameInput, lastName);
-            triggerInputValue(firstNameInput, firstName);
+            // 4. 直接修改网页这里的显示内容，纯文本显示，没有任何花哨的界面
+            if (lastName && firstName) {
+                nameEl.innerHTML = `<span style="color:#2b6cb0; font-weight:bold;">姓：</span>${lastName} &nbsp;&nbsp; <span style="color:#2b6cb0; font-weight:bold;">名：</span>${firstName}`;
+            }
         }
-    }
-
-    // 监听网页全局的所有输入行为
-    document.addEventListener('input', function(e) {
-        // 只要是在输入框（INPUT）里打字，就实时检测
-        if (e.target.tagName === 'INPUT') {
-            processNameSplitting(e.target);
-        }
-    }, true);
+    }, 1000);
 
 })();
