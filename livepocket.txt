@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Stay插件-无痕本地姓名空格切分
+// @name         Stay插件-原位无痕姓名空格切分(隐藏原名标签)
 // @namespace    http://tampermonkey.net
-// @version      5.1
-// @description  全自动运行：严格按空格拆分姓名，且百分之百保留网页原有的“氏”“名”标签及变色样式。
+// @version      7.0
+// @description  全自动运行：隐藏原网页错误位置的“名”标签，严格按空格切分姓名并以“氏 [姓] 名 [名]”干净格式原地显示。
 // @author       AI助手
 // @match        *://*/*
 // @grant        none
@@ -12,39 +12,44 @@
 (function() {
     'use strict';
 
-    // 页面加载后延迟 1 秒执行
+    // 网页加载后延迟 0.8 秒执行，确保数据已渲染完成
     setTimeout(() => {
-        // 1. 找到包含姓名的主容器
-        const nameContainer = document.querySelector('.my-ticket-info__name');
-        if (!nameContainer) return;
+        // 1. 找到包含姓名的外层总容器
+        const container = document.querySelector('.my-ticket-info__name');
+        if (!container) return;
 
-        // 2. 仅提取容器内的“纯文本节点”，不破坏里面的 <span> 标签结构
+        // 2. 找到原网页里面的“名”标签，并直接让它在网页上彻底隐藏
+        const titles = container.querySelectorAll('.my-ticket-info__name-title');
+        if (titles.length >= 2) {
+            const mingTag = titles[1]; // 第二个标签是“名”
+            mingTag.style.display = 'none'; // 彻底隐藏这个错位的标签
+        }
+
+        // 3. 提取夹在中间的名字纯文本，并滤掉乱码控制符（如 ￻）
         let rawText = "";
-        nameContainer.childNodes.forEach(node => {
-            // 只收集文本节点（即夹在标签之间的纯文字）
+        container.childNodes.forEach(node => {
             if (node.nodeType === Node.TEXT_NODE) {
                 rawText += node.textContent;
             }
         });
-
-        // 3. 清洗掉可能存在的不可见垃圾字符（如 ￻）
         let cleanText = rawText.replace(/[\ufffb\u200b-\u200d\ufeff]/g, '').trim();
 
-        // 4. 严格根据空格进行切分
+        // 4. 严格按照中间的空格把名字切开
         let spaceIndex = cleanText.search(/[\s　]+/);
         if (spaceIndex !== -1) {
             let lastName = cleanText.substring(0, spaceIndex).trim();
             let firstName = cleanText.substring(spaceIndex + 1).replace(/^[\s　]+/, '').trim();
 
             if (lastName && firstName) {
-                // 5. 极其优雅地更新文本节点，绝不触碰和破坏原本的变色标签
+                // 5. 原地无痕重构文本节点
                 let textNodeCount = 0;
-                nameContainer.childNodes.forEach(node => {
+                container.childNodes.forEach(node => {
                     if (node.nodeType === Node.TEXT_NODE) {
                         textNodeCount++;
                         if (textNodeCount === 1) {
-                            // 将原本夹在中间的名字，无缝替换为带有“姓氏”提示的文本
-                            node.textContent = ` ${lastName} | 名：${firstName} `;
+                            // 将原文字原地替换为您要求的：姓 [空格] 名 [空格] 名
+                            // 例如变成： "朱 名 亚兵"
+                            node.textContent = ` ${lastName} 名 ${firstName} `;
                         } else {
                             // 清空后面多余的文本节点（如末尾乱码）
                             node.textContent = "";
@@ -53,6 +58,6 @@
                 });
             }
         }
-    }, 1000);
+    }, 800);
 
 })();
