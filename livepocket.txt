@@ -1,56 +1,85 @@
 // ==UserScript==
-// @name         Stay插件-终极格局无损姓名空格切分
+// @name         Stay插件-零延迟格局无损姓名切分
 // @namespace    http://tampermonkey.net
-// @version      9.0
-// @description  全自动运行：绝对不移动不修改任何原有标签，确保100%保持原网页所有字体、变色和格局。
+// @version      10.0
+// @description  毫秒级同步拦截：解决打开网页时的位置移动和闪烁问题，100%保持原有字体格局。
 // @author       AI助手
 // @match        *://*/*
 // @grant        none
-// @run-at       document-end
+// @run-at       document-start
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    // 网页加载后延迟 0.8 秒执行
-    setTimeout(() => {
-        // 1. 找到包含姓名和标签的总容器
-        const container = document.querySelector('.my-ticket-info__name');
-        if (!container) return;
+    // 核心处理函数
+    function doNameSplit(container) {
+        // 防止对同一个标签重复处理导致死循环
+        if (container.hasAttribute('data-stay-split-done')) return;
 
-        // 2. 找到原网页最右边那个错位的“名”标签，直接让它隐藏（不影响它的位置和选择器）
         const titles = container.querySelectorAll('.my-ticket-info__name-title');
-        if (titles.length >= 2) {
-            titles[1].style.opacity = '0'; // 使用透明度隐藏，绝对不破坏原有的DOM位置选择器格局
-            titles[1].style.position = 'absolute';
-            titles[1].style.pointerEvents = 'none';
-        }
+        if (titles.length < 2) return;
 
-        // 3. 遍历容器，只对夹在中间的纯文本节点（名字）进行操作，完全不触碰外层的标签
+        // 1. 隐藏原网页右边错位的“名”标签（用透明度，不破坏CSS选择器格局）
+        titles[1].style.opacity = '0';
+        titles[1].style.position = 'absolute';
+        titles[1].style.pointerEvents = 'none';
+
+        // 2. 提取并清洗名字纯文本
+        let rawText = "";
         container.childNodes.forEach(node => {
             if (node.nodeType === Node.TEXT_NODE) {
-                let text = node.textContent.replace(/[\ufffb\u200b-\u200d\ufeff]/g, '');
-
-                // 4. 严格寻找空格进行切分
-                let spaceIndex = text.search(/[\s　]+/);
-                if (spaceIndex !== -1) {
-                    let lastName = text.substring(0, spaceIndex).trim();
-                    let firstName = text.substring(spaceIndex + 1).replace(/^[\s　]+/, '').trim();
-
-                    if (lastName && firstName) {
-                        // 5. 【终极解决方案】创建一个专用的独立外壳（不加任何样式类，不写死任何字体）
-                        const nameSpan = document.createElement('span');
-                        
-                        // 我们直接在这个外壳里塞入 姓 + 原网页同名的 title 标签 + 名
-                        // 因为新标签名字依然叫做 my-ticket-info__name-title，浏览器会自动赋予它和“氏”一模一样的原生变色与字体！
-                        nameSpan.innerHTML = `${lastName} <span class="my-ticket-info__name-title">名</span> ${firstName}`;
-                        
-                        // 原地替换文本，容器内的标签顺序、个数、排版没有发生任何位移，完全维持原网站的格局
-                        node.parentNode.replaceChild(nameSpan, node);
-                    }
-                }
+                rawText += node.textContent;
             }
         });
-    }, 800);
+        let cleanText = rawText.replace(/[\ufffb\u200b-\u200d\ufeff]/g, '').trim();
+
+        // 3. 严格寻找空格切分
+        let spaceIndex = cleanText.search(/[\s　]+/);
+        if (spaceIndex !== -1) {
+            let lastName = cleanText.substring(0, spaceIndex).trim();
+            let firstName = cleanText.substring(spaceIndex + 1).replace(/^[\s　]+/, '').trim();
+
+            if (lastName && firstName) {
+                // 标记已处理
+                container.setAttribute('data-stay-split-done', 'true');
+
+                // 4. 精准替换文本节点，完全不触碰外层原生标签
+                container.childNodes.forEach(node => {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        const nameSpan = document.createElement('span');
+                        // 注入原生class，确保字体、颜色100%继承
+                        nameSpan.innerHTML = `${lastName} <span class="my-ticket-info__name-title">名</span> ${firstName}`;
+                        node.parentNode.replaceChild(nameSpan, node);
+                    }
+                });
+            }
+        }
+    }
+
+    // 【零延迟核心】：使用底层的 MutationObserver 动态监听 DOM 树的构建
+    const observer = new MutationObserver((mutations, obs) => {
+        const container = document.querySelector('.my-ticket-info__name');
+        if (container) {
+            // 只要一在内存中发现该元素，立刻执行，此时网页还没渲染到屏幕上
+            doNameSplit(container);
+            // 处理完成后直接断开监听，释放手机内存
+            if (container.hasAttribute('data-stay-split-done')) {
+                obs.disconnect();
+            }
+        }
+    });
+
+    // 从网页刚开始加载的那一刻起，就启动最高级别的肉眼不可见监控
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+    });
+
+    // 保底机制：如果因为特殊原因漏掉了，在页面完全加载后再触发一次
+    window.addEventListener('DOMContentLoaded', () => {
+        const container = document.querySelector('.my-ticket-info__name');
+        if (container) doNameSplit(container);
+    });
 
 })();
