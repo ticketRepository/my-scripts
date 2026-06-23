@@ -1,68 +1,45 @@
 // ==UserScript==
-// @name         Stay插件-LivePocket无痕重构
-// @namespace    http://tampermonkey.net
-// @version      13.0
-// @description  完美解决“名”不移位和重复叠加问题，保持 100% 原厂字体变色格局。
-// @author       AI助手
-// @match        *://*/*
-// @grant        none
-// @run-at       document-start
+// @name Stay插件-LivePocket无痕重构
+// @namespace http://tampermonkey.net
+// @version 14.0
+// @description 完美解决"名"不移位和重复叠加问题，保持 100% 原厂字体变色格局。
+// @author AI助手
+// @match https://t.livepocket.jp/*
+// @match https://livepocket.jp/*
+// @grant none
+// @run-at document-start
 // ==/UserScript==
 
 (function() {
-    'use strict';
+  'use strict';
 
-    function doNameSplit(container) {
-        // 去重锁：处理过的标签绝不执行第二次，杜绝文字重叠
-        if (container.hasAttribute('data-stay-split-done')) return;
+  function doNameSplit(container) {
+    if (container.hasAttribute('data-stay-split-done')) return;
 
-        // 获取当前容器内所有的纯文本，过滤掉可能存在的垃圾控制符
-        let totalText = container.textContent.replace(/[\ufffb\u200b-\u200d\ufeff]/g, '');
+    let totalText = container.textContent.replace(/[\ufffb\u200b-\u200d\ufeff]/g, '');
+    let cleanText = totalText.replace(/氏/g, '').replace(/名/g, '').trim();
 
-        // 移除固定的“氏”和“名”，只保留干净的姓名和中间的空格
-        let cleanText = totalText.replace(/氏/g, '').replace(/名/g, '').trim();
+    let spaceIndex = cleanText.search(/[\s ]+/);
+    if (spaceIndex !== -1) {
+      let lastName = cleanText.substring(0, spaceIndex).trim();
+      let firstName = cleanText.substring(spaceIndex + 1).replace(/^[\s ]+/, '').trim();
 
-        // 严格根据中间的空格切分
-        let spaceIndex = cleanText.search(/[\s　]+/);
-        if (spaceIndex !== -1) {
-            let lastName = cleanText.substring(0, spaceIndex).trim();
-            let firstName = cleanText.substring(spaceIndex + 1).replace(/^[\s　]+/, '').trim();
-
-            if (lastName && firstName) {
-                // 在重写前上锁，避免后续动态刷新导致二次覆盖
-                container.setAttribute('data-stay-split-done', 'true');
-
-                // 【核心突破】：直接对内部 HTML 进行字串无痕重写
-                // 我们直接原样写出符合您预期的完美字符串，内部包含原网页上色所使用的 `my-ticket-info__name-title` 皮肤
-                container.innerHTML = `
-                    <span class="my-ticket-info__name-title">氏</span>${lastName}
-                    <span class="my-ticket-info__name-title">名</span>${firstName}
-                `.trim().replace(/\n\s*/g, ''); // 移除换行与多余空格，保证绝不发生排版错位
-            }
-        }
+      if (lastName && firstName) {
+        container.setAttribute('data-stay-split-done', 'true');
+        // 无多余空格：直接拼接，不插入任何空白字符
+        container.innerHTML = '<span class="my-ticket-info__name-title">氏</span>' + lastName + '<span class="my-ticket-info__name-title">名</span>' + firstName;
+      }
     }
+  }
 
-    // 毫秒级拦截：在手机把网页画面渲染出来前就已经在内存里重写完毕，不闪烁、不移位
-    const observer = new MutationObserver((mutations, obs) => {
-        const container = document.querySelector('.my-ticket-info__name');
-        if (container) {
-            doNameSplit(container);
-            if (container.hasAttribute('data-stay-split-done')) {
-                obs.disconnect(); // 完美归位后，彻底断开监听，省电省内存
-            }
-        }
-    });
+  const observer = new MutationObserver(() => {
+    const container = document.querySelector('.my-ticket-info__name');
+    if (container) doNameSplit(container);
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
 
-    // 从网页加载最初始就以最高级别启动肉眼无痕监控
-    observer.observe(document.documentElement, {
-        childList: true,
-        subtree: true
-    });
-
-    // 兜底机制
-    window.addEventListener('DOMContentLoaded', () => {
-        const container = document.querySelector('.my-ticket-info__name');
-        if (container) doNameSplit(container);
-    });
-
+  window.addEventListener('DOMContentLoaded', () => {
+    const container = document.querySelector('.my-ticket-info__name');
+    if (container) doNameSplit(container);
+  });
 })();
