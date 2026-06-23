@@ -8,29 +8,60 @@
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
 (function() {
     'use strict';
 
-    // 网页加载后延迟 1 秒执行，确保名字已经加载出来
+    // 页面加载后延迟 1 秒执行
     setTimeout(() => {
-        // 1. 精准锁定包含姓名的标签（兼容您提供的各种票务样式类名）
-        const nameEl = document.querySelector('.my-ticket-info__name');
-        if (!nameEl) return;
+        // 1. 找到包含姓名的主容器
+        const nameContainer = document.querySelector('.my-ticket-info__name');
+        if (!nameContainer) return;
 
-        // 2. 提取里面的文字，并清洗掉“氏”、“名”和不可见的控制字符（如 ￻）
-        let rawText = nameEl.innerText || nameEl.textContent;
-        let cleanText = rawText.replace(/[氏名]/g, '').replace(/[\ufffb\u200b-\u200d\ufeff]/g, '').trim();
+        // 2. 仅提取容器内的“纯文本节点”，不破坏里面的 <span> 标签结构
+        let rawText = "";
+        nameContainer.childNodes.forEach(node => {
+            // 只收集文本节点（即夹在标签之间的纯文字）
+            if (node.nodeType === Node.TEXT_NODE) {
+                rawText += node.textContent;
+            }
+        });
 
-        // 3. 严格按空格一刀切：前面是姓，后面是名
+        // 3. 清洗掉可能存在的不可见垃圾字符（如 ￻）
+        let cleanText = rawText.replace(/[\ufffb\u200b-\u200d\ufeff]/g, '').trim();
+
+        // 4. 严格根据空格进行切分
         let spaceIndex = cleanText.search(/[\s　]+/);
         if (spaceIndex !== -1) {
             let lastName = cleanText.substring(0, spaceIndex).trim();
             let firstName = cleanText.substring(spaceIndex + 1).replace(/^[\s　]+/, '').trim();
 
-            // 4. 直接修改网页这里的显示内容，纯文本显示，没有任何花哨的界面
             if (lastName && firstName) {
-                nameEl.innerHTML = `<span style="color:#2b6cb0; font-weight:bold;">姓：</span>${lastName} &nbsp;&nbsp; <span style="color:#2b6cb0; font-weight:bold;">名：</span>${firstName}`;
+                // 5. 极其优雅地更新文本节点，绝不触碰和破坏原本的变色标签
+                let textNodeCount = 0;
+                nameContainer.childNodes.forEach(node => {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        textNodeCount++;
+                        if (textNodeCount === 1) {
+                            // 将原本夹在中间的名字，无缝替换为带有“姓氏”提示的文本
+                            node.textContent = ` ${lastName} | 名：${firstName} `;
+                        } else {
+                            // 清空后面多余的文本节点（如末尾乱码）
+                            node.textContent = "";
+                        }
+                    }
+                });
             }
         }
     }, 1000);
