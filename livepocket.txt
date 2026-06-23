@@ -1,45 +1,63 @@
 // ==UserScript==
-// @name Stay插件-LivePocket无痕重构
-// @namespace http://tampermonkey.net
-// @version 14.0
-// @description 完美解决"名"不移位和重复叠加问题，保持 100% 原厂字体变色格局。
-// @author AI助手
-// @match https://t.livepocket.jp/*
-// @match https://livepocket.jp/*
-// @grant none
-// @run-at document-start
+// @name         livepocket 姓名修改
+// @namespace    lanlan
+// @version      4.1
+// @description  最终版。
+// @author       lanlan
+// @match        https://t.livepocket.jp/*
+// @match        https://livepocket.jp/*
+// @grant        none
+// @run-at       document-start
 // ==/UserScript==
 
-(function() {
+(function () {
   'use strict';
+
+  let observer = null;
 
   function doNameSplit(container) {
     if (container.hasAttribute('data-stay-split-done')) return;
 
-    let totalText = container.textContent.replace(/[\ufffb\u200b-\u200d\ufeff]/g, '');
-    let cleanText = totalText.replace(/氏/g, '').replace(/名/g, '').trim();
+    const cleanText = container.textContent
+      .replace(/[\ufffb\u200b-\u200d\ufeff]/g, '')
+      .replace(/氏|名/g, '')
+      .trim();
 
-    let spaceIndex = cleanText.search(/[\s ]+/);
-    if (spaceIndex !== -1) {
-      let lastName = cleanText.substring(0, spaceIndex).trim();
-      let firstName = cleanText.substring(spaceIndex + 1).replace(/^[\s ]+/, '').trim();
+    const spaceIndex = cleanText.search(/\s+/);
+    if (spaceIndex === -1) return;
 
-      if (lastName && firstName) {
-        container.setAttribute('data-stay-split-done', 'true');
-        // 无多余空格：直接拼接，不插入任何空白字符
-        container.innerHTML = '<span class="my-ticket-info__name-title">氏</span>' + lastName + '<span class="my-ticket-info__name-title">名</span>' + firstName;
-      }
+    const lastName = cleanText.substring(0, spaceIndex);
+    const firstName = cleanText.substring(spaceIndex).trim();
+    if (!lastName || !firstName) return;
+
+    container.setAttribute('data-stay-split-done', 'true');
+    container.innerHTML =
+      '<span class="my-ticket-info__name-title">氏</span>' + lastName +
+      '<span class="my-ticket-info__name-title">名</span>' + firstName;
+  }
+
+  function processAll() {
+    document.querySelectorAll('.my-ticket-info__name').forEach(doNameSplit);
+  }
+
+  function tryStop() {
+    // 所有实例都处理完了才 disconnect
+    const all = document.querySelectorAll('.my-ticket-info__name');
+    const allDone = all.length > 0 && [...all].every(el => el.hasAttribute('data-stay-split-done'));
+    if (allDone && observer) {
+      observer.disconnect();
+      observer = null;
     }
   }
 
-  const observer = new MutationObserver(() => {
-    const container = document.querySelector('.my-ticket-info__name');
-    if (container) doNameSplit(container);
+  observer = new MutationObserver(() => {
+    processAll();
+    tryStop();
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
   window.addEventListener('DOMContentLoaded', () => {
-    const container = document.querySelector('.my-ticket-info__name');
-    if (container) doNameSplit(container);
+    processAll();
+    tryStop();
   });
 })();
