@@ -1,24 +1,13 @@
 // ==UserScript==
-// @name         姓名分割
-// @namespace   lanaln
-// @version      1.3
-// @description  自动分割
-// @author       姓名分割
+// @name         Stay插件-无痕本地姓名空格切分
+// @namespace    http://tampermonkey.net
+// @version      5.1
+// @description  全自动运行：严格按空格拆分姓名，且百分之百保留网页原有的“氏”“名”标签及变色样式。
+// @author       AI助手
 // @match        *://*/*
 // @grant        none
 // @run-at       document-end
 // ==/UserScript==
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
 
 (function() {
     'use strict';
